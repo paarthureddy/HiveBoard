@@ -74,18 +74,21 @@ export const setupSocketHandlers = (io) => {
 
                 if (room) {
                     // Clean up stale connections (zombies from server restarts)
-                    // DISABLED FOR DEBUGGING - This was removing valid connections
-                    /* if (io.sockets.sockets) {
+                    // Clean up stale connections (zombies from server restarts)
+                    if (io.sockets && io.sockets.sockets) {
                         const connectedSocketIds = io.sockets.sockets; // Map of socketId -> Socket
                         const initialCount = room.activeConnections.length;
+
+                        // Filter out connections that are not in the connected sockets map
                         room.activeConnections = room.activeConnections.filter(conn =>
                             connectedSocketIds.has(conn.socketId)
                         );
+
                         const finalCount = room.activeConnections.length;
                         if (initialCount !== finalCount) {
                             console.log(`🧹 Creating room: Removed ${initialCount - finalCount} stale connections`);
                         }
-                    } */
+                    }
                     // Add connection to active connections
                     room.addConnection({
                         socketId: socket.id,
@@ -258,6 +261,22 @@ export const setupSocketHandlers = (io) => {
         });
 
 
+
+        // Request Canvas State
+        socket.on('request-canvas-state', async (data) => {
+            try {
+                const { meetingId } = data.meetingId ? data : { meetingId: data };
+                if (meetingId) {
+                    const meeting = await Meeting.findById(meetingId);
+                    if (meeting && meeting.canvasData) {
+                        socket.emit('canvas-state', meeting.canvasData);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching canvas state:', error);
+            }
+        });
+
         // Disconnect
         socket.on('disconnect', async () => {
             console.log(` Client disconnected: ${socket.id}`);
@@ -299,17 +318,18 @@ export const setupSocketHandlers = (io) => {
 
                     if (room) {
                         // Clean up stale connections here too
-                        /* if (io.sockets && io.sockets.sockets) {
+                        // Clean up stale connections here too
+                        if (io.sockets && io.sockets.sockets) {
                             const connectedSocketIds = io.sockets.sockets;
-                            let changed = false;
                             const initialLen = room.activeConnections.length;
                             room.activeConnections = room.activeConnections.filter(conn =>
                                 connectedSocketIds.has(conn.socketId)
                             );
                             if (room.activeConnections.length !== initialLen) {
                                 await room.save();
+                                console.log(`🧹 Participants refresh: Removed ${initialLen - room.activeConnections.length} stale connections`);
                             }
-                        } */
+                        }
 
                         const participants = room.activeConnections.map(conn => ({
                             socketId: conn.socketId,

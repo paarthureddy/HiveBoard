@@ -8,7 +8,7 @@ import { useCanvas } from "@/hooks/useCanvas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGuest } from "@/contexts/GuestContext";
 import { useSocket } from "@/hooks/useSocket";
-import { joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState, sendMessage, sendAddCroquis, sendUpdateCroquis, sendAddSticky, sendUpdateSticky, sendDeleteSticky, sendAddText, sendUpdateText, sendDeleteText, sendUpdateStroke } from "@/lib/socket";
+import { getSocket, joinRoom, leaveRoom, sendStroke, sendPoint, sendClearCanvas, sendUndo, requestCanvasState, sendMessage, sendAddCroquis, sendUpdateCroquis, sendAddSticky, sendUpdateSticky, sendDeleteSticky, sendAddText, sendUpdateText, sendDeleteText, sendUpdateStroke } from "@/lib/socket";
 import { meetingsAPI } from "@/lib/api";
 import Toolbar from "@/components/canvas/Toolbar";
 import ChatPanel from "@/components/canvas/ChatPanel";
@@ -697,16 +697,37 @@ const Canvas = () => {
     if (!meetingId) return;
     const roomIdToJoin = roomIdParam || `room-${meetingId}`;
     setRoomId(roomIdToJoin);
-    joinRoom({
-      roomId: roomIdToJoin,
-      meetingId,
-      userId: user?._id,
-      guestId: guestUser?.guestId,
-      name: user?.name || guestUser?.guestName || 'Anonymous',
-      role: user ? 'owner' : 'guest',
-    });
-    if (meetingId) requestCanvasState({ meetingId });
-    return () => leaveRoom();
+
+    const performJoin = () => {
+      console.log('🔗 Joining room:', roomIdToJoin);
+      joinRoom({
+        roomId: roomIdToJoin,
+        meetingId,
+        userId: user?._id,
+        guestId: guestUser?.guestId,
+        name: user?.name || guestUser?.guestName || 'Anonymous',
+        role: user ? 'owner' : 'guest',
+      });
+      if (meetingId) requestCanvasState({ meetingId });
+    };
+
+    // Initial join
+    performJoin();
+
+    // Re-join on reconnection
+    // This fixes the issue where a user disappears from participant list after a brief disconnect/reconnect
+    const socket = getSocket();
+    const handleReconnect = () => {
+      console.log('🔄 Reconnected to socket, re-joining room...');
+      performJoin();
+    };
+
+    socket.on('connect', handleReconnect);
+
+    return () => {
+      leaveRoom();
+      socket.off('connect', handleReconnect);
+    };
   }, [meetingId, roomIdParam, user, guestUser]);
 
   const handleEditAttempt = () => {
